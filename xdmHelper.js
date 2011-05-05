@@ -30,6 +30,22 @@
           }) + '"' :
           '"' + string + '"';
     }
+    
+    Date.prototype._fxdmToJSON = function (key) {
+      return isFinite(this.valueOf()) ?
+             this.getUTCFullYear()   + '-' +
+           f(this.getUTCMonth() + 1) + '-' +
+           f(this.getUTCDate())      + 'T' +
+           f(this.getUTCHours())     + ':' +
+           f(this.getUTCMinutes())   + ':' +
+           f(this.getUTCSeconds())   + 'Z' : null;
+    };
+    
+    String.prototype._fxdmToJSON =
+    Number.prototype._fxdmToJSON =
+    Boolean.prototype._fxdmToJSON = function (key) {
+        return this.valueOf();
+    };
 
     function str(key, holder) {
       var i,          // The loop counter.
@@ -40,8 +56,8 @@
           partial,
           value = holder[key];
           
-      if (value && typeof value === 'object' && typeof value.toJSON === 'function') {
-        value = value.toJSON(key);
+      if (value && typeof value === 'object' && typeof value._fxdmToJSON === 'function') {
+        value = value._fxdmToJSON(key);
       }
 
       if (typeof rep === 'function') {

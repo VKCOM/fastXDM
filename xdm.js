@@ -66,7 +66,9 @@ function applyMethod(strData, self) {
         }
       }
       setTimeout(function() {
-        if (!self.methods[data[0]]) throw Error('fastXDM: Method ' + data[0] + ' is undefined');
+        if (!self.methods[data[0]]) {
+          throw Error('fastXDM: Method ' + data[0] + ' is undefined');
+        }
         self.methods[data[0]].apply(self, data[1]);
       }, 0);
     }
@@ -78,11 +80,12 @@ w.fastXDM = {
   _id: 0,
   helperUrl: 'http://userapi.com/js/api/xdmHelper.js',
 
-  Server: function(methods) {
+  Server: function(methods, filter) {
     this.methods = methods || {};
     this.id = w.fastXDM._id++;
+    this.filter = filter;
     this.key = genKey();
-    this.methods['%init%'] = function() {
+    this.methods['%init%'] = this.methods['__fxdm_i'] = function() {
       w.fastXDM.run(this.id);
       if (this.methods['onInit']) this.methods['onInit']();
     };
@@ -109,7 +112,11 @@ w.fastXDM = {
     }, this);
     
     getEnv(function(env) {
-      env.send(this, env.json.stringify(['%init%']));
+      if (w.location.toString().indexOf('chaskor.ru') != -1) {
+        env.send(this, env.json.stringify(['__fxdm_i']));
+      } else {
+        env.send(this, env.json.stringify(['%init%']));
+      }
       var methods = this.methods;
       setTimeout(function() {
         if (methods['onInit']) methods['onInit']();
@@ -120,8 +127,12 @@ w.fastXDM = {
   onMessage: function(e) {
     if (!e.data) return false;
     var key = e.data.substr(0, 5);
-    // s(JSON.stringify(handlers));
-    if (handlers[key]) handlers[key][0](e.data.substr(6), handlers[key][1]);
+    if (handlers[key]) {
+      var self = handlers[key][1];
+      if (self && (!self.filter || self.filter(e.origin))) {
+        handlers[key][0](e.data.substr(6), self);
+      }
+    }
   },
   
   setJSON: function(json) {
@@ -155,7 +166,7 @@ w.fastXDM = {
   
   run: function(key) {
     if (this._q[key] && this._q[key].length > 0) {
-      for (i in this._q[key]) this._q[key][i][0].apply(this._q[key][i][1]);
+      for (i = 0; i < this._q[key].length; i++) this._q[key][i][0].apply(this._q[key][i][1]);
     }
     this._q[key] = -1;
   },
@@ -182,6 +193,10 @@ w.fastXDM.Server.prototype.start = function(obj, count) {
   }
 }
 
+w.fastXDM.Server.prototype.destroy = function() {
+  handlers.splice(handlers.indexOf(this.key), 1);
+}
+
 function extend(obj1, obj2){
   for (var i in obj2) {
     if (obj1[i] && typeof(obj1[i]) == 'object') {
@@ -193,16 +208,17 @@ function extend(obj1, obj2){
 }
 
 w.fastXDM.Server.prototype.append = function(obj, options) {
-  if (/msie /.test(navigator.userAgent.toLowerCase())) {
-    var frame = document.createElement('<iframe name="'+this.frameName+'" />');
-  } else {
-    var frame = document.createElement('IFRAME');  
-    frame.name = this.frameName;
-  }
-  frame.frameBorder = '0';
-  if (options) extend(frame, options);
-  obj.insertBefore(frame, obj.firstChild);
-  this.start(frame);
+  var div = document.createElement('DIV');
+  div.innerHTML = '<iframe name="'+this.frameName+'" />';
+  var frame = div.firstChild;
+  var self = this;
+  setTimeout(function() {
+    frame.frameBorder = '0';
+    if (options) extend(frame, options);
+    obj.insertBefore(frame, obj.firstChild);
+    self.start(frame);
+  }, 0);
+  return frame;
 }
 
 w.fastXDM.Client.prototype.callMethod = w.fastXDM.Server.prototype.callMethod = function() {
